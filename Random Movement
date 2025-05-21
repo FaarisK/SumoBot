@@ -1,0 +1,118 @@
+/**************************************************************
+ *  Two-wheel sumo bot – pin map v3 (final)                   *
+ *  Faaris Khan – 4 / 28 / 2025                               *
+ **************************************************************/
+
+#include <Arduino.h>
+
+/* ------------------- MOTOR PINS (final) ------------------- */
+const int LEFT_IN1 = 26;   // forward
+const int LEFT_IN2 = 27;   // reverse
+const int LEFT_EN  = 25;   // enable / PWM
+
+const int RIGHT_IN3 = 14;  // forward
+const int RIGHT_IN4 = 12;  // reverse
+const int RIGHT_EN  = 13;  // enable / PWM
+
+/* ------------------- LINE SENSORS ------------------------- */
+const int LS_UL = 32;   // upper-left
+const int LS_UR = 33;   // upper-right
+const int LS_LL =  2;   // lower-left
+const int LS_LR =  4;   // lower-right
+
+/* ------------------- DISTANCE SENSORS --------------------- */
+const int DIST_L = 22;  // left IR
+const int DIST_M = 19;  // middle IR
+const int DIST_R = 18;  // right IR
+
+/* ------------------- THRESHOLDS --------------------------- */
+const int LINE_HIGH   = HIGH;   // invert if needed
+const int IR_THRESHOLD = 800;   // tune for your IR modules
+
+/* ------------------- HELPERS ------------------------------ */
+class Motor {
+public:
+  Motor(int fwd, int rev) : f(fwd), r(rev) {
+    pinMode(f, OUTPUT); pinMode(r, OUTPUT);
+  }
+  void forward()  { digitalWrite(f, HIGH); digitalWrite(r, LOW);  }
+  void backward() { digitalWrite(f, LOW);  digitalWrite(r, HIGH); }
+  void stop()     { digitalWrite(f, LOW);  digitalWrite(r, LOW);  }
+private:
+  int f, r;
+};
+
+class LineSensor {
+public:
+  explicit LineSensor(int pin) : p(pin) { pinMode(p, INPUT); }
+  bool seesLine() const { return digitalRead(p) == LINE_HIGH; }
+private:
+  int p;
+};
+
+class IRSensor {
+public:
+  explicit IRSensor(int pin) : p(pin) {}
+  int  value()    const { return analogRead(p); }
+  bool opponent() const { return value() > IR_THRESHOLD; }
+private:
+  int p;
+};
+
+/* ------------------- OBJECTS ------------------------------ */
+Motor leftWheel (LEFT_IN1 , LEFT_IN2 );
+Motor rightWheel(RIGHT_IN3, RIGHT_IN4);
+
+LineSensor lsUL(LS_UL), lsUR(LS_UR), lsLL(LS_LL), lsLR(LS_LR);
+IRSensor  irL(DIST_L),   irM(DIST_M), irR(DIST_R);
+
+/* ------------------- MOTION MACROS ------------------------ */
+inline void fwd()        { leftWheel.forward();  rightWheel.forward();  }
+inline void back()       { leftWheel.backward(); rightWheel.backward(); }
+inline void stopAll()    { leftWheel.stop();     rightWheel.stop();    }
+inline void turnLeft()   { leftWheel.backward(); rightWheel.forward(); }
+inline void turnRight()  { leftWheel.forward();  rightWheel.backward(); }
+
+/* ------------------- GLOBALS ------------------------------ */
+unsigned long nextMoveAt = 0;
+
+/* ------------------- SETUP -------------------------------- */
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(LEFT_EN , OUTPUT); digitalWrite(LEFT_EN , HIGH);
+  pinMode(RIGHT_EN, OUTPUT); digitalWrite(RIGHT_EN, HIGH);
+
+  stopAll();                           // safety
+  randomSeed(analogRead(A0));
+}
+
+/* ------------------- LOOP --------------------------------- */
+void loop() {
+  /* 1. Edge avoidance */
+  if (lsUL.seesLine() || lsUR.seesLine() || lsLL.seesLine() || lsLR.seesLine()) {
+    stopAll();
+    back();          delay(300);
+    (random(0, 2) ? turnLeft() : turnRight());
+    delay(400);      stopAll();
+    nextMoveAt = 0;
+    return;
+  }
+
+  /* 2. Optional IR logging */
+  if (irL.opponent() || irM.opponent() || irR.opponent()) {
+    Serial.printf("IR L/M/R = %d / %d / %d\n", irL.value(), irM.value(), irR.value());
+  }
+
+  /* 3. Random wandering */
+  unsigned long now = millis();
+  if (now > nextMoveAt) {
+    stopAll();
+    switch (random(0, 3)) {            // 0=fwd 1=left 2=right
+      case 0: fwd();       break;
+      case 1: turnLeft();  break;
+      case 2: turnRight(); break;
+    }
+    nextMoveAt = now + random(500, 1500);
+  }
+}
