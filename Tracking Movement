@@ -1,0 +1,69 @@
+/**
+ 
+Two‑wheel sumo bot – opponent‑tracking version            *,
+Faaris Khan – 4 / 28 / 2025                               ***/,
+
+#include <Arduino.h>
+
+/* ---------- PIN MAP (unchanged) --------------------------- /
+const int LEFT_IN1 = 26, LEFT_IN2 = 27, LEFT_EN = 25;
+const int RIGHT_IN3 = 14, RIGHT_IN4 = 12, RIGHT_EN = 13;
+const int LS_UL = 32, LS_UR = 33, LS_LL = 2,  LS_LR = 4;
+const int DIST_L = 22, DIST_M = 19, DIST_R = 18;
+
+/ ---------- THRESHOLDS ------------------------------------ /
+const int LINE_ACTIVE = HIGH;
+const int IR_THRESHOLD = 800;
+
+/ ---------- HELPERS --------------------------------------- /
+class Motor {
+public:  Motor(int f, int r): fwd(f), rev(r){ pinMode(f,OUTPUT); pinMode(r,OUTPUT);}
+  void fwdHi(){digitalWrite(fwd,HIGH);digitalWrite(rev,LOW);}   // full power
+  void revHi(){digitalWrite(fwd,LOW );digitalWrite(rev,HIGH);}
+  void stop() {digitalWrite(fwd,LOW );digitalWrite(rev,LOW );}
+private:int fwd,rev;
+};
+class LineSensor{public:explicit LineSensor(int p):pin(p){pinMode(p,INPUT);}bool hit()const{return digitalRead(pin)==LINE_ACTIVE;}private:int pin;};
+class IRSensor  {public:explicit IRSensor(int p):pin(p){} int read()const{return analogRead(pin);} bool on()const{return read()>IR_THRESHOLD;}private:int pin;};
+
+Motor left (LEFT_IN1, LEFT_IN2), right(RIGHT_IN3, RIGHT_IN4);
+LineSensor lsUL(LS_UL), lsUR(LS_UR), lsLL(LS_LL), lsLR(LS_LR);
+IRSensor  irL(DIST_L), irM(DIST_M), irR(DIST_R);
+
+/ ---------- MOTION SHORTCUTS ------------------------------ */
+inline void forward(){ left.fwdHi();  right.fwdHi();  }
+inline void back()   { left.revHi();  right.revHi();  }
+inline void spinL()  { left.revHi();  right.fwdHi(); }
+inline void spinR()  { left.fwdHi();  right.revHi(); }
+inline void stopAll(){ left.stop();   right.stop();   }
+/* ---------- SETUP ----------------------------------------- /
+void setup(){
+  Serial.begin(115200);
+  pinMode(LEFT_EN ,OUTPUT); digitalWrite(LEFT_EN ,HIGH);
+  pinMode(RIGHT_EN,OUTPUT); digitalWrite(RIGHT_EN,HIGH);
+  stopAll();
+}
+
+/ ---------- LOOP ------------------------------------------ /
+void loop(){
+  / 1. ring edge check /
+  if(lsUL.hit()lsUR.hit()lsLL.hit()||lsLR.hit()){
+    stopAll();  back(); delay(300);
+    (random(0,2)? spinL(): spinR()); delay(400);
+    stopAll();  return;
+  }
+
+  / 2. opponent tracking /
+  bool L = irL.on(), M = irM.on(), R = irR.on();
+
+  if(LMR){
+    if(M && !L && !R){ forward(); }          // centered → charge
+    else if(L && !R) { spinL();  }           // opponent left  → seek left
+    else if(R && !L) { spinR();  }           // opponent right → seek right
+    else             { forward(); }          // multiple sensors → straight
+    return;
+  }
+
+  / 3. idle search (slow crawl) */
+  left.fwdHi(); right.fwdHi();               // or PWM for slower speed
+}
